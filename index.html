@@ -37,7 +37,35 @@
 
     <section id="contacto" class="hidden">
       <h2>Contacto</h2>
-      <p>Comunícate con el equipo de OCHINA para soporte y consultas.</p>
+      <form class="contact-form" onsubmit="enviarFormulario(event)">
+        <div class="form-group">
+          <label for="nombre">Nombre Completo</label>
+          <input type="text" id="nombre" name="nombre" placeholder="Escribe tu nombre completo" required>
+        </div>
+
+        <div class="form-group">
+          <label for="email">Correo Electrónico</label>
+          <input type="email" id="email" name="email" placeholder="correo@ejemplo.com" required>
+        </div>
+
+        <div class="form-group">
+          <label for="asunto">Asunto</label>
+          <select id="asunto" name="asunto" required>
+            <option value="">Selecciona una opción</option>
+            <option value="consultas">Consultas Generales</option>
+            <option value="tramites">Trámites</option>
+            <option value="reportes">Reportes</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="mensaje">Mensaje</label>
+          <textarea id="mensaje" name="mensaje" rows="6" placeholder="Escribe tu mensaje aquí" required></textarea>
+        </div>
+
+        <button type="submit" class="primary-button">Enviar</button>
+        <div id="formResponse" class="form-response hidden" role="status"></div>
+      </form>
     </section>
   </main>
 

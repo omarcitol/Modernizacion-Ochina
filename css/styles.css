@@ -82,6 +82,68 @@ section h2 {
   color: var(--nav-bg);
 }
 
+.contact-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.form-group {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.form-group label {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #0f2d5b;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+  width: 100%;
+  border: 1px solid rgba(0, 35, 102, 0.2);
+  border-radius: 12px;
+  padding: 0.9rem 1rem;
+  font: inherit;
+  background: #ffffff;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: #002366;
+  box-shadow: 0 0 0 4px rgba(0, 35, 102, 0.08);
+}
+
+.primary-button {
+  width: fit-content;
+  padding: 0.95rem 1.6rem;
+  border: none;
+  border-radius: 999px;
+  background: #002366;
+  color: #ffffff;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.primary-button:hover,
+.primary-button:focus-visible {
+  background: #0c2150;
+  transform: translateY(-1px);
+}
+
+.form-response {
+  background: #e8f0ff;
+  color: #032a5c;
+  border: 1px solid rgba(0, 35, 102, 0.18);
+  padding: 1rem 1.2rem;
+  border-radius: 14px;
+}
+
 .hidden {
   display: none !important;
 }
