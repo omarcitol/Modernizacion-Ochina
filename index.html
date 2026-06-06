@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OCHINA - Modernización</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-content">
+      <h1>OCHINA - Modernización</h1>
+      <nav class="main-nav">
+        <button type="button" onclick="show('inicio')">Inicio</button>
+        <button type="button" onclick="show('servicios')">Servicios</button>
+        <button type="button" onclick="show('descargas')">Descargas</button>
+        <button type="button" onclick="show('contacto')">Contacto</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <section id="inicio">
+      <h2>Bienvenido a OCHINA</h2>
+      <p>Portal institucional para la modernización de hidrografía y navegación.</p>
+    </section>
+
+    <section id="servicios" class="hidden">
+      <h2>Servicios</h2>
+      <p>Encuentra datos, reportes y servicios especializados para navegación segura.</p>
+    </section>
+
+    <section id="descargas" class="hidden">
+      <h2>Descargas</h2>
+      <p>Descarga mapas oficiales, boletines y documentos técnicos.</p>
+    </section>
+
+    <section id="contacto" class="hidden">
+      <h2>Contacto</h2>
+      <p>Comunícate con el equipo de OCHINA para soporte y consultas.</p>
+    </section>
+  </main>
+
+  <script src="js/main.js"></script>
+</body>
+</html>
