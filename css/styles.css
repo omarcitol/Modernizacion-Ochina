@@ -1,5 +1,5 @@
 :root {
-  color-scheme: dark;
+  color-scheme: light;
   --nav-bg: #002366;
   --text-light: #ffffff;
   --body-bg: #f4f7f6;
@@ -107,7 +107,13 @@ section h2 {
   padding: 0.9rem 1rem;
   font: inherit;
   background: #ffffff;
+  color: #1a1a1a;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.form-group input::placeholder,
+.form-group textarea::placeholder {
+  color: rgba(26, 26, 26, 0.45);
 }
 
 .form-group input:focus,
