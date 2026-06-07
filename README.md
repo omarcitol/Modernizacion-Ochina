@@ -34,3 +34,4 @@ Este diseño mejora la usabilidad y reduce la carga cognitiva en comparación co
 3. Completa el formulario y haz clic en `Enviar`.
 4. Revisa la consola del navegador para ver los datos enviados.
 5. Observa el mensaje de éxito que aparece en la página.
+<img width="734" height="592" alt="fase2 1" src="https://github.com/user-attachments/assets/c6060287-e412-4eb0-9c24-7e8fdf14ba11" />
