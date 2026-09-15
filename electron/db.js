@@ -614,7 +614,7 @@ function createSale({ items, metodoPago, metodoPagoOtro = '', pagos = null, clie
   const otherPayment = String(metodoPagoOtro || '').trim().slice(0, 80);
   const isMixed = Array.isArray(pagos) && pagos.length > 0;
   if (!['efectivo', 'pago_movil', 'transferencia', 'zelle', 'binance', 'divisas', 'fiado', 'otro'].includes(metodoPago) && !isMixed) throw new Error('Método de pago no válido.');
-  if (metodoPago === 'otro' && !otherPayment) throw new Error('Especifica el método de pago.');
+  if (metodoPago === 'otro' && !otherPayment && !isMixed) throw new Error('Especifica el método de pago.');
   if (!['USD', 'BS'].includes(moneda)) throw new Error('Moneda no válida.');
   if (metodoPago === 'fiado' && !Number.isInteger(Number(clienteFiadoId))) throw new Error('Selecciona el cliente del fiado.');
   if (metodoPago === 'fiado') requirePermission(usuarioId, 'fiado');

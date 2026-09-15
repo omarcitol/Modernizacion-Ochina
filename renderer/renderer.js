@@ -149,6 +149,10 @@ function renderCart() {
 function renderMixedPayments(total) {
   const methods = [['efectivo', 'Efectivo'], ['pago_movil', 'Pago móvil'], ['transferencia', 'Transferencia'], ['zelle', 'Zelle'], ['binance', 'Binance'], ['divisas', 'Divisas'], ['otro', 'Otro']];
   $('#mixedPaymentLines').innerHTML = state.mixedPayments.map((line, index) => `<div class="grid grid-cols-[1fr_58px_78px_20px] gap-1" data-mixed-line="${index}"><select class="field py-1 text-[10px]" data-mixed-method>${methods.map(([value, label]) => `<option value="${value}" ${line.metodoPago === value ? 'selected' : ''}>${label}</option>`).join('')}</select><select class="field py-1 text-[10px]" data-mixed-currency><option ${line.moneda === 'USD' ? 'selected' : ''}>USD</option><option ${line.moneda === 'BS' ? 'selected' : ''}>BS</option></select><input class="field py-1 text-[10px]" data-mixed-amount type="number" min="0" step="0.01" placeholder="Monto" value="${line.monto}"><button type="button" class="text-red-500" data-remove-mixed="${index}">×</button></div>`).join('');
+  updateMixedPaymentSummary(total);
+}
+
+function updateMixedPaymentSummary(total) {
   const paid = state.mixedPayments.reduce((sum, line) => sum + (Number(line.monto) || 0) / (line.moneda === 'BS' ? Number(state.rate) : 1), 0);
   $('#mixedPaymentTotal').textContent = `Cubierto: ${money(paid)} / ${money(total)}`;
 }
@@ -552,7 +556,11 @@ $('#mixedPaymentLines').addEventListener('input', (event) => {
   const line = state.mixedPayments[Number(row.dataset.mixedLine)];
   if (event.target.matches('[data-mixed-method]')) line.metodoPago = event.target.value;
   if (event.target.matches('[data-mixed-currency]')) line.moneda = event.target.value;
-  if (event.target.matches('[data-mixed-amount]')) line.monto = event.target.value;
+  if (event.target.matches('[data-mixed-amount]')) {
+    line.monto = event.target.value;
+    updateMixedPaymentSummary(state.cart.reduce((sum, item) => sum + priceUsd(item) * item.cantidad, 0));
+    return;
+  }
   renderCart();
 });
 $('#mixedPaymentLines').addEventListener('click', (event) => {
