@@ -612,7 +612,8 @@ function createSale({ items, metodoPago, metodoPagoOtro = '', pagos = null, clie
   requireActiveUser(usuarioId);
   if (!Array.isArray(items) || items.length === 0) throw new Error('El carrito está vacío.');
   const otherPayment = String(metodoPagoOtro || '').trim().slice(0, 80);
-  const isMixed = Array.isArray(pagos) && pagos.length > 0;
+  const paymentLines = Array.isArray(pagos) ? pagos : [];
+  const isMixed = paymentLines.length > 1;
   if (!['efectivo', 'pago_movil', 'transferencia', 'zelle', 'binance', 'divisas', 'fiado', 'otro'].includes(metodoPago) && !isMixed) throw new Error('Método de pago no válido.');
   if (metodoPago === 'otro' && !otherPayment && !isMixed) throw new Error('Especifica el método de pago.');
   if (!['USD', 'BS'].includes(moneda)) throw new Error('Moneda no válida.');
@@ -651,8 +652,8 @@ function createSale({ items, metodoPago, metodoPagoOtro = '', pagos = null, clie
     const rate = Math.round(dailyRate * 100) / 100;
     const roundedTotal = Math.round(total * 100) / 100;
     const totalBs = Math.round(roundedTotal * rate * 100) / 100;
-    const normalizedPayments = isMixed
-      ? pagos.map((payment) => {
+    const normalizedPayments = paymentLines.length > 0
+      ? paymentLines.map((payment) => {
         const method = String(payment.metodoPago || '').trim();
         const currency = String(payment.moneda || '').toUpperCase();
         const amount = Number(payment.monto);

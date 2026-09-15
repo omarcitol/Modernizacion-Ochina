@@ -579,7 +579,11 @@ $('#checkoutBtn').addEventListener('click', async () => {
     if (!cash) return notify('Abre una caja antes de registrar ventas.', true);
     const soldCart = [...state.cart];
     const metodoPagoOtro = $('#otherPayment').value.trim();
-    const pagos = state.mixed ? state.mixedPayments.map((line) => ({ ...line, monto: Number(line.monto) })) : null;
+    const pagos = state.mixed
+      ? state.mixedPayments.map((line) => ({ ...line, monto: Number(line.monto) }))
+      : state.payment === 'efectivo'
+        ? [{ metodoPago: 'efectivo', moneda: state.currency, monto: Number($('#cashReceived').value) }]
+        : null;
     if (state.payment === 'otro' && !metodoPagoOtro) return notify('Especifica el método de pago.', true);
     if (!state.mixed && state.payment === 'efectivo') {
       const total = Number($('#cartTotal').dataset.amount || 0);

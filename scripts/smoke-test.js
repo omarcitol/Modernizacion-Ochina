@@ -66,6 +66,18 @@ app.whenReady().then(() => {
     });
     const product = db.listProducts('SMOKE-001').find((item) => item.id === productId);
     assert(Number(product.stock) === 13, 'La venta no descontó el stock.');
+    const cashSale = db.createSale({
+      usuarioId: admin.id,
+      cajaId: cash.id,
+      items: [{ productoId: productId, cantidad: 1 }],
+      metodoPago: 'efectivo',
+      moneda: 'USD',
+      tasaCambio: 36.75,
+      pagos: [{ metodoPago: 'efectivo', moneda: 'USD', monto: 3 }]
+    });
+    assert(Number(cashSale.vueltoUsd) === 0.5, 'El vuelto de efectivo no se calculó correctamente.');
+    assert(Number(cashSale.pagos[0].monto) === 2.5, 'El efectivo neto no se guardó correctamente.');
+
     const mixedSale = db.createSale({
       usuarioId: admin.id,
       cajaId: cash.id,
@@ -83,7 +95,7 @@ app.whenReady().then(() => {
     assert(Math.abs(Number(mixedSale.pagos[1].montoUsd) - 1.5) < 0.01, 'El pago mixto en Bs no se convirtió correctamente.');
     assert(Number(mixedSale.vueltoUsd) === 0, 'El pago mixto calculó un vuelto inesperado.');
     const mixedProduct = db.listProducts('SMOKE-001').find((item) => item.id === productId);
-    assert(Number(mixedProduct.stock) === 12, 'El pago mixto no descontó el stock.');
+    assert(Number(mixedProduct.stock) === 11, 'El pago mixto no descontó el stock.');
 
     const localNow = new Date(Date.now() - new Date().getTimezoneOffset() * 60000);
     const date = localNow.toISOString().slice(0, 10);
@@ -102,13 +114,13 @@ app.whenReady().then(() => {
     assert(otherPayment?.metodoPagoOtro === 'Pago con convenio', 'El método personalizado no persistió.');
 
     const report = db.getSalesReport({ from: date, to: date });
-    assert(Number(report.totals.ventas) === 3, 'El reporte no contó las ventas.');
+    assert(Number(report.totals.ventas) === 4, 'El reporte no contó las ventas.');
     assert(report.daily.length === 1, 'El reporte diario no contiene la venta.');
     assert(report.topProducts.length === 1, 'El reporte de productos está vacío.');
 
     const closed = db.closeCashSession({
       usuarioId: admin.id,
-      montoContado: 26,
+      montoContado: 28.5,
       montoContadoBs: 0
     });
     assert(Number(closed.diferencia) === 0, 'El cierre de caja tiene una diferencia inesperada.');
