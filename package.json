@@ -1,0 +1,54 @@
+{
+  "name": "solutec-pos",
+  "version": "1.0.0",
+  "description": "Solutec POS: sistema local y offline para pequeños comercios en Venezuela.",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "npm run css:build && electron .",
+    "css:build": "tailwindcss -i ./renderer/tailwind.css -o ./renderer/styles.css --minify",
+    "dev": "npm run css:build && electron . --enable-logging",
+    "test:smoke": "electron scripts/smoke-test.js",
+    "dist:dir": "npm run css:build && electron-builder --win dir",
+    "dist:portable": "npm run css:build && electron-builder --win portable",
+    "dist": "npm run css:build && electron-builder --win",
+    "postinstall": "electron-rebuild -f -w better-sqlite3"
+  },
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@electron/rebuild": "^4.2.0",
+    "electron": "^32.2.1",
+    "electron-builder": "^25.1.8",
+    "tailwindcss": "^3.4.13"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.3.0"
+  },
+  "build": {
+    "appId": "com.solutec.pos",
+    "productName": "Solutec POS",
+    "files": [
+      "electron/**/*",
+      "renderer/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "win": {
+      "signAndEditExecutable": false,
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "Solutec POS"
+    }
+  }
+}
