@@ -512,7 +512,7 @@ $('#restoreBackupBtn').addEventListener('click', async () => {
   if (state.user?.rol !== 'admin') return notify('Solo el dueño puede restaurar respaldos.', true);
   if (!confirm('La restauración reemplazará los datos actuales por los del respaldo. Se recomienda exportar un respaldo antes de continuar. ¿Deseas continuar?')) return;
   try {
-    const result = await window.posApi.backup.restore();
+    const result = await window.posApi.backup.restore(state.user.id);
     if (result.restored) {
       state.user = null;
       state.adminReady = false;

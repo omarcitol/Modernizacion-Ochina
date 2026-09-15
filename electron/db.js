@@ -6,6 +6,11 @@ const Database = require('better-sqlite3');
 let database;
 let databasePath;
 let activeUserId = null;
+let lastActivityAt = 0;
+const pinFailures = new Map();
+const SESSION_IDLE_TIMEOUT_MS = 90 * 60 * 1000;
+const PIN_MAX_ATTEMPTS = 5;
+const PIN_LOCK_MS = 30 * 1000;
 
 function initializeDatabase(userDataPath) {
   databasePath = path.join(userDataPath, 'solutec-pos.sqlite');
@@ -393,6 +398,7 @@ function setupAdmin({ nombre, pin }) {
     VALUES (?, 'admin', ?, ?, ?, ?, ?)
   `).run(cleanName, credentials.hash, credentials.salt, JSON.stringify({ all: true }), recovery.hash, recovery.salt);
   activeUserId = Number(result.lastInsertRowid);
+  lastActivityAt = Date.now();
   return { id: result.lastInsertRowid, nombre: cleanName, rol: 'admin', recoveryCode };
 }
 
@@ -498,13 +504,7 @@ function verifyPin(pin, requiredRole = 'admin') {
     WHERE activo = 1 AND rol = ? LIMIT 1
   `).get(requiredRole);
   if (!user) throw new Error('No existe un usuario administrador configurado.');
-  const candidate = hashPin(pin, user.pin_salt).hash;
-  if (!crypto.timingSafeEqual(Buffer.from(candidate, 'hex'), Buffer.from(user.pin_hash, 'hex'))) {
-    throw new Error('PIN incorrecto.');
-  }
-  activeUserId = user.id;
-
-  return { id: user.id, nombre: user.nombre, rol: user.rol };
+  return authenticateUser(user, pin);
 }
 
 function loginUser({ id, pin }) {
@@ -513,27 +513,48 @@ function loginUser({ id, pin }) {
     FROM usuarios WHERE id = ? AND activo = 1
   `).get(Number(id));
   if (!user) throw new Error('Usuario no disponible.');
-  const candidate = hashPin(pin, user.pin_salt).hash;
-  if (!crypto.timingSafeEqual(Buffer.from(candidate, 'hex'), Buffer.from(user.pin_hash, 'hex'))) {
-    throw new Error('PIN incorrecto.');
-  }
-  activeUserId = user.id;
-
-  return { id: user.id, nombre: user.nombre, rol: user.rol, permisos: JSON.parse(user.permisos || '{}') };
+  return authenticateUser(user, pin);
 }
 
 function logoutUser() {
   activeUserId = null;
+  lastActivityAt = 0;
   return true;
 }
 
 function requireActiveUser(usuarioId, allowedRoles = null) {
   const id = Number(usuarioId);
   if (!Number.isInteger(id) || id <= 0 || activeUserId !== id) throw new Error('La sesión de usuario no es válida.');
+  if (!lastActivityAt || Date.now() - lastActivityAt > SESSION_IDLE_TIMEOUT_MS) {
+    logoutUser();
+    throw new Error('La sesión expiró por inactividad. Inicia sesión nuevamente.');
+  }
   const user = assertDatabase().prepare('SELECT id, rol, activo FROM usuarios WHERE id = ?').get(id);
   if (!user || !user.activo) throw new Error('El usuario ya no está activo.');
   if (allowedRoles && !allowedRoles.includes(user.rol)) throw new Error('El usuario no tiene permiso para esta acción.');
+  lastActivityAt = Date.now();
   return user;
+}
+
+function authenticateUser(user, pin) {
+  const now = Date.now();
+  const failure = pinFailures.get(user.id) || { attempts: 0, lockedUntil: 0 };
+  if (failure.lockedUntil > now) {
+    const seconds = Math.ceil((failure.lockedUntil - now) / 1000);
+    throw new Error(`Demasiados intentos. Espera ${seconds} segundos.`);
+  }
+  const candidate = hashPin(pin, user.pin_salt).hash;
+  const valid = crypto.timingSafeEqual(Buffer.from(candidate, 'hex'), Buffer.from(user.pin_hash, 'hex'));
+  if (!valid) {
+    const attempts = failure.attempts + 1;
+    const lockedUntil = attempts >= PIN_MAX_ATTEMPTS ? now + PIN_LOCK_MS : 0;
+    pinFailures.set(user.id, { attempts: lockedUntil ? 0 : attempts, lockedUntil });
+    throw new Error(lockedUntil ? 'Demasiados intentos. Espera 30 segundos.' : 'PIN incorrecto.');
+  }
+  pinFailures.delete(user.id);
+  activeUserId = user.id;
+  lastActivityAt = now;
+  return { id: user.id, nombre: user.nombre, rol: user.rol, permisos: JSON.parse(user.permisos || '{}') };
 }
 
 function requirePermission(usuarioId, permission, allowedRoles = null) {
@@ -1013,7 +1034,8 @@ function exportBackup(destinationPath, userDataPath) {
   return { path: destinationPath, createdAt: backup.createdAt };
 }
 
-function restoreBackup(sourcePath, userDataPath) {
+function restoreBackup(sourcePath, userDataPath, usuarioId) {
+  requireActiveUser(usuarioId, ['admin']);
   if (!sourcePath || path.resolve(sourcePath) === path.resolve(databasePath)) {
     throw new Error('Selecciona un archivo de respaldo diferente a la base activa.');
   }

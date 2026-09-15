@@ -101,10 +101,10 @@ app.whenReady().then(() => {
     if (result.canceled || !result.filePath) return { canceled: true };
     return db.exportBackup(result.filePath, app.getPath('userData'));
   });
-  ipcMain.handle('backup:restore', async () => {
+  ipcMain.handle('backup:restore', async (_event, usuarioId) => {
     const result = await dialog.showOpenDialog({ title: 'Restaurar respaldo de Solutec POS', properties: ['openFile'], filters: [{ name: 'Respaldo SQLite', extensions: ['sqlite', 'db'] }] });
     if (result.canceled || !result.filePaths[0]) return { canceled: true };
-    db.restoreBackup(result.filePaths[0], app.getPath('userData'));
+    db.restoreBackup(result.filePaths[0], app.getPath('userData'), usuarioId);
     return { restored: true };
   });
   createWindow();

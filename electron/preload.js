@@ -55,6 +55,6 @@ contextBridge.exposeInMainWorld('posApi', {
   backup: {
     create: () => ipcRenderer.invoke('backup:create'),
     export: () => ipcRenderer.invoke('backup:export'),
-    restore: () => ipcRenderer.invoke('backup:restore')
+    restore: (usuarioId) => ipcRenderer.invoke('backup:restore', usuarioId)
   }
 });
