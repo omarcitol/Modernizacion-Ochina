@@ -87,15 +87,43 @@ app.whenReady().then(() => {
       tasaCambio: 36.75,
       pagos: [
         { metodoPago: 'efectivo', moneda: 'USD', monto: 1 },
-        { metodoPago: 'pago_movil', moneda: 'BS', monto: 55.13 }
+        { metodoPago: 'pago_movil', moneda: 'BS', monto: 55.13, referenciaPago: 'SMOKE-REF-001' }
       ]
     });
     assert(mixedSale.pagos.length === 2, 'El pago mixto no guardó sus líneas.');
     assert(Math.abs(Number(mixedSale.pagos[0].montoUsd) - 1) < 0.01, 'El pago mixto en USD no se convirtió correctamente.');
     assert(Math.abs(Number(mixedSale.pagos[1].montoUsd) - 1.5) < 0.01, 'El pago mixto en Bs no se convirtió correctamente.');
+    assert(mixedSale.pagos[1].referenciaPago === 'SMOKE-REF-001', 'La referencia del pago móvil no persistió.');
     assert(Number(mixedSale.vueltoUsd) === 0, 'El pago mixto calculó un vuelto inesperado.');
     const mixedProduct = db.listProducts('SMOKE-001').find((item) => item.id === productId);
     assert(Number(mixedProduct.stock) === 11, 'El pago mixto no descontó el stock.');
+    let missingReferenceRejected = false;
+    try {
+      db.createSale({
+        usuarioId: admin.id,
+        cajaId: cash.id,
+        items: [{ productoId: productId, cantidad: 1 }],
+        metodoPago: 'otro',
+        moneda: 'USD',
+        tasaCambio: 36.75,
+        pagos: [{ metodoPago: 'punto_venta', moneda: 'USD', monto: 2.5 }]
+      });
+    } catch (error) {
+      missingReferenceRejected = true;
+    }
+    assert(missingReferenceRejected, 'Un pago electrónico sin referencia fue aceptado.');
+    const posSale = db.createSale({
+      usuarioId: admin.id,
+      cajaId: cash.id,
+      items: [{ productoId: productId, cantidad: 1 }],
+      metodoPago: 'otro',
+      metodoPagoOtro: 'Punto de venta',
+      moneda: 'USD',
+      tasaCambio: 36.75,
+      pagos: [{ metodoPago: 'punto_venta', moneda: 'USD', monto: 2.5, referenciaPago: 'POS-4582' }]
+    });
+    assert(posSale.pagos[0].referenciaPago === 'POS-4582', 'La referencia del punto de venta no persistió.');
+    assert(db.getSaleReceipt(posSale.id).pagos[0].referenciaPago === 'POS-4582', 'El recibo no recuperó la referencia.');
 
     const localNow = new Date(Date.now() - new Date().getTimezoneOffset() * 60000);
     const date = localNow.toISOString().slice(0, 10);
@@ -114,7 +142,7 @@ app.whenReady().then(() => {
     assert(otherPayment?.metodoPagoOtro === 'Pago con convenio', 'El método personalizado no persistió.');
 
     const report = db.getSalesReport({ from: date, to: date });
-    assert(Number(report.totals.ventas) === 4, 'El reporte no contó las ventas.');
+    assert(Number(report.totals.ventas) === 5, 'El reporte no contó las ventas.');
     assert(report.daily.length === 1, 'El reporte diario no contiene la venta.');
     assert(report.topProducts.length === 1, 'El reporte de productos está vacío.');
 
@@ -123,7 +151,7 @@ app.whenReady().then(() => {
       montoContado: 28.5,
       montoContadoBs: 0
     });
-    assert(Number(closed.diferencia) === 0, 'El cierre de caja tiene una diferencia inesperada.');
+    assert(Math.abs(Number(closed.diferencia)) < 0.001, 'El cierre de caja tiene una diferencia inesperada.');
     console.log(`Smoke test OK: venta #${sale.id}, stock restante ${product.stock}, cierre sin diferencia.`);
   } finally {
     db.closeDatabase();

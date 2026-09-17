@@ -292,7 +292,7 @@ async function loadCreditCustomers() {
   $('#emptyCredit').classList.toggle('hidden', state.creditCustomers.length > 0);
 }
 function today() { return new Date().toISOString().slice(0, 10); }
-function paymentLabel(value, other = '') { return value === 'otro' ? (other || 'Otro') : ({ efectivo: 'Efectivo', pago_movil: 'Pago móvil', transferencia: 'Transferencia', zelle: 'Zelle', binance: 'Binance', divisas: 'Divisas', fiado: 'Fiado' })[value] || value; }
+function paymentLabel(value, other = '') { return value === 'otro' ? (other || 'Otro') : ({ efectivo: 'Efectivo', punto_venta: 'Punto de venta', pago_movil: 'Pago móvil', transferencia: 'Transferencia', zelle: 'Zelle', binance: 'Binance', divisas: 'Divisas', fiado: 'Fiado' })[value] || value; }
 async function loadSalesReport() {
   const report = await window.posApi.sales.report({ from: $('#reportFrom').value, to: $('#reportTo').value });
   $('#reportSales').textContent = report.totals.ventas;
@@ -328,7 +328,9 @@ function showReceipt(result) {
   const date = result.creadoEn ? new Date(`${result.creadoEn.replace(' ', 'T')}Z`).toLocaleString('es-VE') : new Date().toLocaleString('es-VE');
   const business = state.business || {};
   const header = [business.nombre || 'SOLUTEC POS', business.rif, business.direccion, business.telefono].filter(Boolean).join('\n');
-  $('#receiptText').textContent = `${header}\nComprobante #${result.id}\n${date}\nUsuario: ${result.usuario || state.user?.nombre || 'Sin sesión'}\n\n${lines.join('\n')}\n\nTOTAL: ${shownTotal}${result.moneda === 'BS' ? `\nTasa: ${result.tasaCambio} Bs/USD` : ''}\nPago: ${paymentLabel(result.metodoPago || state.payment, result.metodoPagoOtro || '')}\n\n${business.mensajeTicket || 'Gracias por su compra'}`;
+  const paymentLines = (result.pagos || []).map((payment) => `- ${paymentLabel(payment.metodoPago, payment.metodoPagoOtro)}: ${payment.moneda === 'BS' ? bolivars(payment.monto) : money(payment.monto)}${payment.referenciaPago ? ` · Ref: ${payment.referenciaPago}` : ''}`).join('\n');
+  const changeUsd = Number(result.vueltoUsd || 0);
+  $('#receiptText').textContent = `${header}\nComprobante #${result.id}\n${date}\nUsuario: ${result.usuario || state.user?.nombre || 'Sin sesión'}\n\n${lines.join('\n')}\n\nTOTAL: ${shownTotal}\nTOTAL DUAL: ${money(result.total)} · ${bolivars(Number(result.totalBs || result.total * Number(result.tasaCambio || state.rate || 1)))}${result.tasaCambio ? `\nTasa: ${result.tasaCambio} Bs/USD` : ''}\nFORMAS DE PAGO:\n${paymentLines || `- ${paymentLabel(result.metodoPago || state.payment, result.metodoPagoOtro || '')}`}\nVUELTO: ${money(changeUsd)} · ${bolivars(changeUsd * Number(result.tasaCambio || state.rate || 1))}\n\n${business.mensajeTicket || 'Gracias por su compra'}`;
   $('#receiptModal').classList.replace('hidden', 'flex');
 }
 
@@ -586,26 +588,88 @@ $('#mixedPaymentLines').addEventListener('click', (event) => {
 $('#saleCurrency').addEventListener('change', () => { state.currency = $('#saleCurrency').value; $('#rateField').classList.toggle('opacity-50', state.currency !== 'BS'); renderCart(); });
 $('#saleRate').readOnly = true;
 $('#cashReceived').addEventListener('input', updateCashChange);
+let checkoutPayments = [];
+let checkoutCart = [];
+function checkoutTotalUsd() {
+  return checkoutCart.reduce((sum, item) => sum + priceUsd(item) * item.cantidad, 0);
+}
+function renderPaymentModal() {
+  const methods = [['efectivo', 'Efectivo'], ['punto_venta', 'Punto de venta'], ['pago_movil', 'Pago móvil'], ['transferencia', 'Transferencia'], ['divisas', 'Divisas'], ['fiado', 'Fiado']];
+  $('#paymentLinesModal').innerHTML = checkoutPayments.map((line, index) => `<div class="grid gap-2 rounded-xl border border-slate-200 p-3 sm:grid-cols-[1fr_90px_120px_1fr_28px]" data-payment-line="${index}"><select class="field py-2 text-xs" data-payment-method>${methods.map(([value, label]) => `<option value="${value}" ${line.metodoPago === value ? 'selected' : ''}>${label}</option>`).join('')}</select><select class="field py-2 text-xs" data-payment-currency><option value="USD" ${line.moneda === 'USD' ? 'selected' : ''}>USD</option><option value="BS" ${line.moneda === 'BS' ? 'selected' : ''}>Bs</option></select><input class="field py-2 text-xs" data-payment-amount type="number" min="0" step="0.01" placeholder="Monto recibido" value="${line.monto}"><input class="field py-2 text-xs" data-payment-reference maxlength="80" placeholder="${['punto_venta', 'pago_movil', 'transferencia'].includes(line.metodoPago) ? 'Referencia obligatoria' : 'Referencia opcional'}" value="${escapeHtml(line.referenciaPago || '')}"><button type="button" class="text-red-500" data-remove-payment="${index}" ${checkoutPayments.length === 1 ? 'disabled' : ''}>×</button></div>`).join('');
+  updatePaymentModalSummary();
+}
+function updatePaymentModalSummary() {
+  const total = checkoutTotalUsd();
+  const paid = checkoutPayments.reduce((sum, line) => sum + ((Number(line.monto) || 0) / (line.moneda === 'BS' ? Number(state.rate || 1) : 1)), 0);
+  const balance = Math.round((total - paid) * 100) / 100;
+  const change = Math.max(0, -balance);
+  $('#paymentReceivedLabel').textContent = money(paid);
+  $('#paymentDueLabel').textContent = balance > 0 ? `${money(balance)} · ${bolivars(balance * Number(state.rate || 1))}` : '$0.00';
+  $('#paymentChangeLabel').textContent = money(change);
+  $('#paymentDueLabel').classList.toggle('text-red-600', balance > 0);
+  $('#paymentDueLabel').classList.toggle('text-emerald-600', balance <= 0);
+  $('#confirmPaymentButton').disabled = paid + 0.005 < total;
+}
+function openPaymentModal() {
+  checkoutCart = [...state.cart];
+  const total = checkoutTotalUsd();
+  checkoutPayments = [{ metodoPago: 'efectivo', moneda: state.currency, monto: '', referenciaPago: '' }];
+  $('#paymentTotalLabel').textContent = `Total: ${money(total)} · ${bolivars(total * Number(state.rate || 1))} · Tasa ${Number(state.rate || 1).toFixed(2)}`;
+  $('#paymentModal').classList.replace('hidden', 'flex');
+  renderPaymentModal();
+  setTimeout(() => $('#paymentLinesModal [data-payment-amount]')?.focus(), 0);
+}
+function closePaymentModal() {
+  $('#paymentModal').classList.replace('flex', 'hidden');
+  checkoutPayments = [];
+  checkoutCart = [];
+}
 $('#checkoutBtn').addEventListener('click', async () => {
+  if (!state.user) return notify('Inicia sesión antes de vender.', true);
+  const cash = await window.posApi.cash.current();
+  if (!cash) return notify('Abre una caja antes de registrar ventas.', true);
+  openPaymentModal();
+});
+document.querySelectorAll('#cancelPayment, #cancelPaymentButton').forEach((button) => button.addEventListener('click', closePaymentModal));
+$('#addPaymentLineModal').addEventListener('click', () => {
+  checkoutPayments.push({ metodoPago: 'pago_movil', moneda: 'BS', monto: '', referenciaPago: '' });
+  renderPaymentModal();
+});
+$('#paymentLinesModal').addEventListener('input', (event) => {
+  const row = event.target.closest('[data-payment-line]');
+  if (!row) return;
+  const line = checkoutPayments[Number(row.dataset.paymentLine)];
+  if (event.target.matches('[data-payment-amount]')) line.monto = event.target.value;
+  if (event.target.matches('[data-payment-reference]')) line.referenciaPago = event.target.value;
+  updatePaymentModalSummary();
+});
+$('#paymentLinesModal').addEventListener('change', (event) => {
+  const row = event.target.closest('[data-payment-line]');
+  if (!row) return;
+  const line = checkoutPayments[Number(row.dataset.paymentLine)];
+  if (event.target.matches('[data-payment-method]')) line.metodoPago = event.target.value;
+  if (event.target.matches('[data-payment-currency]')) line.moneda = event.target.value;
+  renderPaymentModal();
+});
+$('#paymentLinesModal').addEventListener('click', (event) => {
+  const button = event.target.closest('[data-remove-payment]');
+  if (!button || checkoutPayments.length === 1) return;
+  checkoutPayments.splice(Number(button.dataset.removePayment), 1);
+  renderPaymentModal();
+});
+$('#paymentForm').addEventListener('submit', async (event) => {
+  event.preventDefault();
   try {
-    if (!state.user) return notify('Inicia sesión antes de vender.', true);
     const cash = await window.posApi.cash.current();
     if (!cash) return notify('Abre una caja antes de registrar ventas.', true);
-    const soldCart = [...state.cart];
-    const metodoPagoOtro = $('#otherPayment').value.trim();
-    const pagos = state.mixed
-      ? state.mixedPayments.map((line) => ({ ...line, monto: Number(line.monto) }))
-      : state.payment === 'efectivo'
-        ? [{ metodoPago: 'efectivo', moneda: state.currency, monto: Number($('#cashReceived').value) }]
-        : null;
-    if (state.payment === 'otro' && !metodoPagoOtro) return notify('Especifica el método de pago.', true);
-    if (!state.mixed && state.payment === 'efectivo') {
-      const total = Number($('#cartTotal').dataset.amount || 0);
-      const received = Number($('#cashReceived').value);
-      if (!Number.isFinite(received) || received < total) return notify('El efectivo recibido no cubre el total.', true);
-    }
-    const result = await window.posApi.sales.create({ usuarioId: state.user.id, cajaId: cash.id, clienteFiadoId: $('#creditCustomerSelect').value ? Number($('#creditCustomerSelect').value) : null, moneda: state.currency, tasaCambio: state.rate, metodoPago: state.mixed ? 'otro' : state.payment, metodoPagoOtro, pagos, items: soldCart.map((item) => ({ productoId: item.id, cantidad: item.cantidad })) });
-    showReceipt({ ...result, cart: soldCart, metodoPagoOtro });
+    const total = checkoutTotalUsd();
+    const paid = checkoutPayments.reduce((sum, line) => sum + ((Number(line.monto) || 0) / (line.moneda === 'BS' ? Number(state.rate || 1) : 1)), 0);
+    if (paid + 0.005 < total) return notify('Completa el saldo restante antes de confirmar.', true);
+    if (checkoutPayments.some((line) => ['punto_venta', 'pago_movil', 'transferencia'].includes(line.metodoPago) && !String(line.referenciaPago || '').trim())) return notify('Agrega la referencia de cada pago electrónico.', true);
+    const first = checkoutPayments[0];
+    const result = await window.posApi.sales.create({ usuarioId: state.user.id, cajaId: cash.id, clienteFiadoId: $('#creditCustomerSelect').value ? Number($('#creditCustomerSelect').value) : null, moneda: state.currency, tasaCambio: state.rate, metodoPago: checkoutPayments.length > 1 || first.metodoPago === 'punto_venta' ? 'otro' : first.metodoPago, metodoPagoOtro: first.metodoPago === 'punto_venta' ? 'Punto de venta' : '', pagos: checkoutPayments.map((line) => ({ ...line, monto: Number(line.monto) })), items: checkoutCart.map((item) => ({ productoId: item.id, cantidad: item.cantidad })) });
+    showReceipt({ ...result, cart: checkoutCart });
+    closePaymentModal();
     state.cart = [];
     state.mixed = false;
     state.mixedPayments = [{ metodoPago: 'efectivo', moneda: 'USD', monto: '' }, { metodoPago: 'pago_movil', moneda: 'BS', monto: '' }];
@@ -613,7 +677,7 @@ $('#checkoutBtn').addEventListener('click', async () => {
     $('#cashChangePanel').classList.add('hidden');
     renderCart();
     await loadProducts();
-    if (state.payment === 'fiado') await loadCreditCustomers();
+    await loadCreditCustomers();
     notify(`Venta #${result.id} registrada correctamente.`);
   } catch (error) {
     notify(error.message, true);

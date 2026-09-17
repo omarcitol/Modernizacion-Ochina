@@ -72,6 +72,7 @@ function initializeDatabase(userDataPath) {
       venta_id INTEGER NOT NULL REFERENCES ventas(id) ON DELETE CASCADE,
       metodo_pago TEXT NOT NULL,
       metodo_pago_otro TEXT NOT NULL DEFAULT '',
+      referencia_pago TEXT NOT NULL DEFAULT '',
       moneda TEXT NOT NULL CHECK (moneda IN ('USD', 'BS')),
       monto REAL NOT NULL CHECK (monto > 0),
       monto_usd REAL NOT NULL CHECK (monto_usd > 0),
@@ -305,11 +306,16 @@ function initializeDatabase(userDataPath) {
     venta_id INTEGER NOT NULL REFERENCES ventas(id) ON DELETE CASCADE,
     metodo_pago TEXT NOT NULL,
     metodo_pago_otro TEXT NOT NULL DEFAULT '',
+    referencia_pago TEXT NOT NULL DEFAULT '',
     moneda TEXT NOT NULL CHECK (moneda IN ('USD', 'BS')),
     monto REAL NOT NULL CHECK (monto > 0),
     monto_usd REAL NOT NULL CHECK (monto_usd > 0),
     creado_en TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`);
+  const paymentColumns = database.prepare('PRAGMA table_info(pagos_venta)').all();
+  if (!paymentColumns.some((column) => column.name === 'referencia_pago')) {
+    database.exec("ALTER TABLE pagos_venta ADD COLUMN referencia_pago TEXT NOT NULL DEFAULT ''");
+  }
   database.exec(`INSERT INTO pagos_venta (venta_id, metodo_pago, metodo_pago_otro, moneda, monto, monto_usd)
     SELECT v.id, v.metodo_pago, v.metodo_pago_otro, v.moneda,
       CASE WHEN v.moneda = 'BS' THEN v.total_bs ELSE v.total END, v.total
@@ -634,7 +640,7 @@ function archiveProduct(id, usuarioId = null) {
   recordAudit({ usuarioId, accion: 'archivar', entidad: 'producto', entidadId: Number(id), detalle: 'Producto retirado del inventario' });
 }
 
-function createSale({ items, metodoPago, metodoPagoOtro = '', pagos = null, clienteFiadoId = null, moneda = 'USD', tasaCambio = null, usuarioId = null, cajaId = null }) {
+function createSale({ items, metodoPago, metodoPagoOtro = '', referenciaPago = '', pagos = null, clienteFiadoId = null, moneda = 'USD', tasaCambio = null, usuarioId = null, cajaId = null }) {
   const db = assertDatabase();
   requireActiveUser(usuarioId);
   if (!Array.isArray(items) || items.length === 0) throw new Error('El carrito está vacío.');
@@ -685,14 +691,16 @@ function createSale({ items, metodoPago, metodoPagoOtro = '', pagos = null, clie
         const currency = String(payment.moneda || '').toUpperCase();
         const amount = Number(payment.monto);
         const other = String(payment.metodoPagoOtro || '').trim().slice(0, 80);
-        if (!['efectivo', 'pago_movil', 'transferencia', 'zelle', 'binance', 'divisas', 'fiado', 'otro'].includes(method) || !['USD', 'BS'].includes(currency) || !Number.isFinite(amount) || amount <= 0) {
+        const reference = String(payment.referenciaPago || '').trim().slice(0, 80);
+        if (!['efectivo', 'punto_venta', 'pago_movil', 'transferencia', 'zelle', 'binance', 'divisas', 'fiado', 'otro'].includes(method) || !['USD', 'BS'].includes(currency) || !Number.isFinite(amount) || amount <= 0) {
           throw new Error('Línea de pago mixta inválida.');
         }
         if (method === 'otro' && !other) throw new Error('Especifica el método de pago.');
         if (method === 'fiado') throw new Error('Fiado no se puede combinar en un pago mixto.');
-        return { metodoPago: method, metodoPagoOtro: other, moneda: currency, monto: Math.round(amount * 100) / 100, montoUsd: Math.round((currency === 'BS' ? amount / rate : amount) * 100) / 100 };
+        if (['punto_venta', 'pago_movil', 'transferencia'].includes(method) && !reference) throw new Error('Agrega la referencia del pago.');
+        return { metodoPago: method, metodoPagoOtro: other, referenciaPago: reference, moneda: currency, monto: Math.round(amount * 100) / 100, montoUsd: Math.round((currency === 'BS' ? amount / rate : amount) * 100) / 100 };
       })
-      : [{ metodoPago, metodoPagoOtro: otherPayment, moneda, monto: moneda === 'BS' ? totalBs : roundedTotal, montoUsd: roundedTotal }];
+      : [{ metodoPago, metodoPagoOtro: otherPayment, referenciaPago: String(referenciaPago || '').trim().slice(0, 80), moneda, monto: moneda === 'BS' ? totalBs : roundedTotal, montoUsd: roundedTotal }];
     if (isMixed && normalizedPayments.length < 2) throw new Error('Agrega al menos dos líneas para usar pago mixto.');
     const paidUsd = normalizedPayments.reduce((sum, payment) => sum + payment.montoUsd, 0);
     const changeUsd = Math.round((paidUsd - roundedTotal) * 100) / 100;
@@ -708,8 +716,8 @@ function createSale({ items, metodoPago, metodoPagoOtro = '', pagos = null, clie
     const saleMethod = isMixed ? 'otro' : metodoPago;
     const saleOther = isMixed ? 'Pago mixto' : otherPayment;
     const sale = db.prepare('INSERT INTO ventas (total, ganancia, metodo_pago, metodo_pago_otro, cliente_fiado_id, moneda, tasa_cambio, total_bs, usuario_id, caja_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(roundedTotal, Math.round(ganancia * 100) / 100, saleMethod, saleOther, metodoPago === 'fiado' ? Number(clienteFiadoId) : null, moneda, rate, totalBs, usuarioId || null, activeCashId);
-    const insertPayment = db.prepare('INSERT INTO pagos_venta (venta_id, metodo_pago, metodo_pago_otro, moneda, monto, monto_usd) VALUES (?, ?, ?, ?, ?, ?)');
-    normalizedPayments.forEach((payment) => insertPayment.run(sale.lastInsertRowid, payment.metodoPago, payment.metodoPagoOtro, payment.moneda, payment.monto, payment.montoUsd));
+    const insertPayment = db.prepare('INSERT INTO pagos_venta (venta_id, metodo_pago, metodo_pago_otro, referencia_pago, moneda, monto, monto_usd) VALUES (?, ?, ?, ?, ?, ?, ?)');
+    normalizedPayments.forEach((payment) => insertPayment.run(sale.lastInsertRowid, payment.metodoPago, payment.metodoPagoOtro, payment.referenciaPago || '', payment.moneda, payment.monto, payment.montoUsd));
     recordAudit({ usuarioId, accion: 'crear', entidad: 'venta', entidadId: sale.lastInsertRowid, detalle: `Total ${roundedTotal} ${moneda}; método ${metodoPago === 'otro' ? otherPayment : metodoPago}` });
     normalized.forEach((item) => {
       const updated = updateStock.run(item.cantidad, item.id, item.cantidad);
@@ -903,7 +911,7 @@ function getSaleReceipt(saleId) {
     WHERE d.venta_id = ?
     ORDER BY d.id
   `).all(Number(saleId));
-  const pagos = db.prepare(`SELECT metodo_pago AS metodoPago, metodo_pago_otro AS metodoPagoOtro, moneda, monto, monto_usd AS montoUsd FROM pagos_venta WHERE venta_id = ? ORDER BY id`).all(Number(saleId));
+  const pagos = db.prepare(`SELECT metodo_pago AS metodoPago, metodo_pago_otro AS metodoPagoOtro, referencia_pago AS referenciaPago, moneda, monto, monto_usd AS montoUsd FROM pagos_venta WHERE venta_id = ? ORDER BY id`).all(Number(saleId));
   return { ...sale, cart, pagos };
 }
 
