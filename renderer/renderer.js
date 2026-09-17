@@ -39,6 +39,8 @@ async function loadCashSession() {
     state.rate = Number(state.cash.tasa_cambio) || 1;
     $('#saleRate').value = state.rate.toFixed(2);
   }
+  $('#rateBadge').textContent = state.cash ? `Tasa: ${Number(state.rate).toFixed(2)} Bs/USD` : '';
+  $('#rateBadge').classList.toggle('hidden', !state.cash);
   async function loadBusinessConfig() {
     state.business = await window.posApi.business.get();
     if (!state.business) return;
@@ -154,7 +156,11 @@ function renderMixedPayments(total) {
 
 function updateMixedPaymentSummary(total) {
   const paid = state.mixedPayments.reduce((sum, line) => sum + (Number(line.monto) || 0) / (line.moneda === 'BS' ? Number(state.rate) : 1), 0);
-  $('#mixedPaymentTotal').textContent = `Cubierto: ${money(paid)} / ${money(total)}`;
+  const missing = Math.max(0, total - paid);
+  const overpaid = Math.max(0, paid - total);
+  $('#mixedPaymentTotal').textContent = overpaid > 0
+    ? `Pagado: ${money(paid)} · Vuelto: ${money(overpaid)}`
+    : `Pagado: ${money(paid)} · Falta: ${money(missing)} / ${bolivars(missing * Number(state.rate || 1))}`;
 }
 
 function renderInventory() {
@@ -236,6 +242,11 @@ function openAuth(action) {
     $('#adminPin').focus();
   });
 }
+window.addEventListener('focus', () => {
+  if (!$('#authModal').classList.contains('hidden')) {
+    setTimeout(() => $('#adminPin').focus(), 50);
+  }
+});
 async function openUserLogin() {
   const users = await window.posApi.users.list();
   const activeUsers = users.filter((user) => user.activo);
@@ -487,6 +498,7 @@ $('#sessionButton').addEventListener('click', async () => {
       state.adminReady = false;
       state.cashAction = null;
       $('#sessionButton').textContent = 'Iniciar sesión';
+      document.querySelector('[data-view="pos"]').click();
       notify('Sesión cerrada. La caja permanece abierta.');
     } catch (error) {
       return notify(error.message, true);
@@ -617,8 +629,8 @@ $('#receiveMerchandiseBtn').addEventListener('click', async () => {
   const productId = Number(prompt(`Selecciona el ID del producto:\n\n${productText}`));
   const product = products.find((item) => item.id === productId);
   if (!product) return notify('Producto no válido.', true);
-  const cantidad = Number(prompt(`Cantidad recibida de ${product.nombre}:`, '1'));
-  const costo = Number(prompt('Costo unitario del proveedor:', String(product.costo || 0)));
+  const cantidad = Number(prompt(`Cantidad recibida de ${product.nombre} (${unitLabel(product.unidad)}):`, product.unidad === 'kg' ? '1' : product.unidad === 'g' ? '1000' : '1'));
+  const costo = Number(prompt(`Costo por ${unitLabel(product.unidad)}:`, String(product.costo || 0)));
   const monedaCosto = (prompt('Moneda del costo: USD o BS', product.monedaCosto || 'USD') || '').trim().toUpperCase();
   if (!Number.isFinite(cantidad) || !Number.isFinite(costo) || !['USD', 'BS'].includes(monedaCosto)) return notify('Datos de mercancía inválidos.', true);
   const motivo = prompt('Proveedor o referencia (opcional):', '') || '';
@@ -706,6 +718,7 @@ $('#authForm').addEventListener('submit', async (event) => {
       $('#sessionButton').textContent = state.user.nombre;
       notify(`Sesión iniciada: ${state.user.nombre}`);
       closeAuth();
+      document.querySelector('[data-view="pos"]').click();
       return;
     } else {
       await window.posApi.auth.verifyPin(pin);
@@ -739,15 +752,22 @@ $('#recoveryForm').addEventListener('submit', async (event) => {
 $('#newUserBtn').addEventListener('click', () => { if (state.user?.rol !== 'admin') return notify('Solo el dueño puede gestionar perfiles.', true); openUserModal(); });
 $('#changePinBtn').addEventListener('click', async () => {
   if (state.user?.rol !== 'admin') return notify('Solo el dueño puede cambiar el PIN.', true);
+  $('#currentPinValue').value = '';
   $('#newPinValue').value = '';
+  $('#confirmPinValue').value = '';
   $('#changePinModal').classList.replace('hidden', 'flex');
-  setTimeout(() => $('#newPinValue').focus(), 0);
+  setTimeout(() => $('#currentPinValue').focus(), 0);
 });
 $('#cancelChangePin').addEventListener('click', () => $('#changePinModal').classList.replace('flex', 'hidden'));
 $('#changePinForm').addEventListener('submit', async (event) => {
   event.preventDefault();
   try {
-    await window.posApi.auth.updateAdminPin({ usuarioId: state.user.id, pin: $('#newPinValue').value });
+    const oldPin = $('#currentPinValue').value;
+    const newPin = $('#newPinValue').value;
+    if (!/^\d{4,8}$/.test(oldPin) || !/^\d{4,8}$/.test(newPin)) return notify('Los PIN deben tener entre 4 y 8 dígitos.', true);
+    if (newPin !== $('#confirmPinValue').value) return notify('La confirmación del nuevo PIN no coincide.', true);
+    if (!confirm('¿Seguro que deseas cambiar el PIN del dueño?')) return;
+    await window.posApi.auth.updateAdminPin({ usuarioId: state.user.id, oldPin, pin: newPin });
     $('#changePinModal').classList.replace('flex', 'hidden');
     notify('PIN actualizado. Guarda el código de recuperación del negocio.');
   } catch (error) {
@@ -800,10 +820,12 @@ $('#cashForm').addEventListener('submit', async (event) => {
     if (state.cashAction === 'open') {
       await window.posApi.cash.open({ usuarioId: state.user.id, montoInicial: $('#cashUsd').value, montoInicialBs: $('#cashBs').value, tasaCambio: $('#cashRate').value });
       await loadCashSession();
+      await loadProducts();
       notify('Caja abierta con la tasa del día.');
     } else {
       const result = await window.posApi.cash.close({ usuarioId: state.user.id, montoContado: $('#cashUsd').value, montoContadoBs: $('#cashBs').value });
       await loadCashSession();
+      await loadProducts();
       alert(`Caja cerrada.\n\nUSD esperado: $${Number(result.esperado).toFixed(2)}\nUSD contado: $${Number(result.montoContado).toFixed(2)}\nDiferencia USD: $${Number(result.diferencia).toFixed(2)}\n\nBs esperado: ${bolivars(result.esperadoBs)}\nBs contado: ${bolivars(result.montoContadoBs)}\nDiferencia Bs: ${bolivars(result.diferenciaBs)}`);
     }
     closeCashModal();
@@ -866,7 +888,10 @@ $('#businessForm').addEventListener('submit', async (event) => {
   }
 });
 
-Promise.all([loadProducts(), loadBusinessConfig()]).catch((error) => notify(error.message, true));
+Promise.resolve().then(async () => {
+  await loadCashSession();
+  await Promise.all([loadProducts(), loadBusinessConfig()]);
+}).catch((error) => notify(error.message, true));
 renderCart();
 setInterval(async () => {
   try {

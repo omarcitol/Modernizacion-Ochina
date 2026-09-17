@@ -461,14 +461,19 @@ function setUserActive({ id, activo, usuarioId }) {
   return { id: userId, activo: nextActive };
 }
 
-function updateAdminPin({ usuarioId, pin }) {
+function updateAdminPin({ usuarioId, oldPin, pin }) {
   const db = assertDatabase();
   requireActiveUser(usuarioId, ['admin']);
+  const admin = db.prepare("SELECT id, pin_hash, pin_salt FROM usuarios WHERE rol = 'admin' AND activo = 1").get();
+  if (!admin) throw new Error('No existe un administrador activo.');
+  const oldHash = hashPin(oldPin, admin.pin_salt).hash;
+  if (!crypto.timingSafeEqual(Buffer.from(oldHash, 'hex'), Buffer.from(admin.pin_hash, 'hex'))) {
+    throw new Error('El PIN actual es incorrecto.');
+  }
   if (!/^\d{4,8}$/.test(String(pin))) throw new Error('El PIN debe tener entre 4 y 8 dígitos.');
   const credentials = hashPin(pin);
-  const result = db.prepare(`
-    UPDATE usuarios SET pin_hash = ?, pin_salt = ? WHERE rol = 'admin' AND activo = 1
-  `).run(credentials.hash, credentials.salt);
+  const result = db.prepare('UPDATE usuarios SET pin_hash = ?, pin_salt = ? WHERE id = ?')
+    .run(credentials.hash, credentials.salt, admin.id);
   if (result.changes !== 1) throw new Error('No existe un administrador activo.');
 }
 
@@ -560,6 +565,7 @@ function authenticateUser(user, pin) {
 function requirePermission(usuarioId, permission, allowedRoles = null) {
   const user = requireActiveUser(usuarioId, allowedRoles);
   if (user.rol === 'admin') return user;
+  if (user.rol === 'encargado' && permission === 'fiado') return user;
   const stored = assertDatabase().prepare('SELECT permisos FROM usuarios WHERE id = ?').get(user.id);
   const permissions = JSON.parse(stored?.permisos || '{}');
   if (!permissions.all && !permissions[permission]) throw new Error('El usuario no tiene permiso para esta acción.');

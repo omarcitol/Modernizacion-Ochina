@@ -27,7 +27,7 @@
 
     <main class="min-w-0 flex-1">
       <header class="flex h-20 items-center justify-between border-b border-slate-200 bg-white px-6 lg:px-10">
-        <div><p class="text-sm font-semibold text-slate-400">Operación local</p><h1 id="pageTitle" class="text-xl font-extrabold">Punto de venta</h1></div>
+        <div><p class="text-sm font-semibold text-slate-400">Operación local <span id="rateBadge" class="ml-2 hidden text-xs font-bold text-blue-500"></span></p><h1 id="pageTitle" class="text-xl font-extrabold">Punto de venta</h1></div>
         <div class="flex items-center gap-3"><button id="sessionButton" class="rounded-xl bg-blue-50 px-3 py-2 text-xs font-bold text-blue-600">Iniciar sesión</button><button id="backupBtn" class="hidden rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-200 sm:block">Respaldar</button><button id="themeToggle" class="grid h-9 w-9 place-items-center rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200" title="Cambiar tema" aria-label="Cambiar tema">☾</button><span class="hidden rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 sm:block">● Sin conexión · Local</span><div class="grid h-10 w-10 place-items-center rounded-full bg-slate-100 font-bold text-slate-600">CA</div></div>
       </header>
 
@@ -90,7 +90,7 @@
     <form id="changePinForm" class="panel w-full max-w-sm p-6">
       <h2 class="text-xl font-extrabold">Cambiar PIN del dueño</h2>
       <p class="mt-1 text-sm text-slate-400">Esta acción solo está disponible para el administrador principal.</p>
-      <label class="mt-5 block"><span class="mb-1.5 block text-sm font-bold text-slate-600">Nuevo PIN</span><input id="newPinValue" class="field" type="password" inputmode="numeric" pattern="[0-9]{4,8}" minlength="4" maxlength="8" required></label>
+      <label class="mt-5 block"><span class="mb-1.5 block text-sm font-bold text-slate-600">PIN actual</span><input id="currentPinValue" class="field" type="password" inputmode="numeric" minlength="4" maxlength="8" required></label><label class="mt-4 block"><span class="mb-1.5 block text-sm font-bold text-slate-600">Nuevo PIN</span><input id="newPinValue" class="field" type="password" inputmode="numeric" pattern="[0-9]{4,8}" minlength="4" maxlength="8" required></label><label class="mt-4 block"><span class="mb-1.5 block text-sm font-bold text-slate-600">Repetir nuevo PIN</span><input id="confirmPinValue" class="field" type="password" inputmode="numeric" minlength="4" maxlength="8" required></label>
       <div class="mt-6 flex justify-end gap-3"><button type="button" id="cancelChangePin" class="action bg-slate-100 text-slate-600">Cancelar</button><button class="action bg-blue-600 text-white">Guardar PIN</button></div>
     </form>
   </div>
