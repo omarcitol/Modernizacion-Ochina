@@ -309,7 +309,9 @@ function closeAuth() {
   state.authAction = null;
 }
 function can(permission) {
-  return state.user?.rol === 'admin' || Boolean(state.user?.permisos?.all || state.user?.permisos?.[permission]);
+  return state.user?.rol === 'admin'
+    || (state.user?.rol === 'encargado' && permission === 'fiado')
+    || Boolean(state.user?.permisos?.all || state.user?.permisos?.[permission]);
 }
 async function requireAdmin(action) {
   if (state.adminReady) return true;
